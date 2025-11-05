@@ -1,30 +1,40 @@
 require('dotenv').config();
 const express = require('express');
-const cookieParser = require('cookie-parser');
+const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
+const cookieParser = require('cookie-parser');
 const morgan = require('morgan');
-const connectDB = require('./config/database');
-const { errorHandler, notFound } = require('./middleware/errorHandler');
 
-// Initialize Express app
+const { errorHandler } = require('./middleware/errorHandler'); // ✅ FIXED: destructure
+const { apiLimiter } = require('./middleware/rateLimiter');
+
+// Import routes
+const authRoutes = require('./routes/authRoutes');
+const userRoutes = require('./routes/userRoutes');
+
 const app = express();
 
 // Connect to MongoDB
-connectDB();
+mongoose.connect(process.env.MONGODB_URI)
+  .then(() => console.log('✅ MongoDB Connected'))
+  .catch((err) => console.error('❌ MongoDB Connection Error:', err));
 
 // Middleware
-app.use(helmet()); // Security headers
+app.use(helmet());
 app.use(cors({
   origin: process.env.CLIENT_URL || 'http://localhost:3000',
   credentials: true
 }));
-app.use(express.json()); // Parse JSON bodies
-app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
-app.use(cookieParser()); // Parse cookies
-app.use(morgan('dev')); // HTTP request logger
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
+app.use(morgan('dev'));
 
-// Health check route
+// Apply general rate limiting
+app.use('/api/', apiLimiter);
+
+// Health check
 app.get('/', (req, res) => {
   res.status(200).json({
     success: true,
@@ -34,43 +44,22 @@ app.get('/', (req, res) => {
   });
 });
 
-// API Routes
-app.use('/api/auth', require('./routes/authRoutes'));
+// Routes
+app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
 
-// 404 Handler
-app.use(notFound);
+// Error handler (must be last)
+app.use(errorHandler); // ✅ Now this will work
 
-// Error Handler (must be last)
-app.use(errorHandler);
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: 'Route not found'
+  });
+});
 
-// Start server
 const PORT = process.env.PORT || 5000;
-
-const server = app.listen(PORT, () => {
-  console.log(`
-╔════════════════════════════════════════╗
-║   🎓 Student Network API Server       ║
-║                                        ║
-║   Status: ✅ Running                  ║
-║   Port: ${PORT}                           ║
-║   Mode: ${process.env.NODE_ENV || 'development'}              ║
-║                                        ║
-║   Health: http://localhost:${PORT}     ║
-║   Auth API: http://localhost:${PORT}/api/auth  ║
-╚════════════════════════════════════════╝
-  `);
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
 });
-
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (err) => {
-  console.error(`❌ Unhandled Rejection: ${err.message}`);
-  server.close(() => process.exit(1));
-});
-
-// Handle uncaught exceptions
-process.on('uncaughtException', (err) => {
-  console.error(`❌ Uncaught Exception: ${err.message}`);
-  process.exit(1);
-});
-
-module.exports = app;

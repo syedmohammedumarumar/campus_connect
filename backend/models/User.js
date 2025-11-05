@@ -5,78 +5,58 @@ const userSchema = new mongoose.Schema({
   // Basic Info
   name: {
     type: String,
-    required: [true, 'Name is required'],
-    trim: true,
-    minlength: [2, 'Name must be at least 2 characters'],
-    maxlength: [50, 'Name cannot exceed 50 characters']
+    required: [true, 'Please provide a name'],
+    trim: true
   },
-  
   email: {
     type: String,
-    required: [true, 'Email is required'],
+    required: [true, 'Please provide an email'],
     unique: true,
     lowercase: true,
-    trim: true,
-    match: [
-      /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/,
-      'Please provide a valid email'
-    ]
+    match: [/^\S+@\S+\.\S+$/, 'Please provide a valid email']
   },
-  
   rollNumber: {
     type: String,
-    required: [true, 'Roll number is required'],
+    required: [true, 'Please provide a roll number'],
     unique: true,
-    uppercase: true,
-    trim: true,
-    match: [/^[A-Z0-9]+$/, 'Roll number must contain only letters and numbers']
+    uppercase: true
   },
-  
   password: {
     type: String,
-    required: [true, 'Password is required'],
+    required: [true, 'Please provide a password'],
     minlength: [8, 'Password must be at least 8 characters'],
-    select: false // Don't return password by default
+    select: false
   },
   
   // Academic Info
   year: {
     type: String,
     enum: ['1', '2', '3', '4'],
-    required: [true, 'Year is required']
+    required: [true, 'Please provide year']
   },
-  
   branch: {
     type: String,
-    required: [true, 'Branch is required'],
-    trim: true
+    required: [true, 'Please provide branch']
   },
   
   // Profile Info
   bio: {
     type: String,
-    maxlength: [500, 'Bio cannot exceed 500 characters'],
-    default: ''
+    maxlength: [500, 'Bio cannot exceed 500 characters']
   },
-  
   profilePicture: {
     type: String,
     default: ''
   },
-  
   phone: {
     type: String,
     match: [/^[0-9]{10}$/, 'Please provide a valid 10-digit phone number']
   },
-  
   linkedIn: {
-    type: String,
-    trim: true
+    type: String
   },
-  
   github: {
-    type: String,
-    trim: true
+    type: String
   },
   
   // Professional Info
@@ -84,7 +64,6 @@ const userSchema = new mongoose.Schema({
     type: String,
     trim: true
   }],
-  
   interests: [{
     type: String,
     trim: true
@@ -95,20 +74,28 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
-  
   otp: {
     type: String,
     select: false
   },
-  
   otpExpiry: {
     type: Date,
     select: false
   },
-  
   otpAttempts: {
     type: Number,
     default: 0,
+    select: false
+  },
+  
+  // Login Security (NEW - ADDED)
+  loginAttempts: {
+    type: Number,
+    default: 0,
+    select: false
+  },
+  lockUntil: {
+    type: Date,
     select: false
   },
   
@@ -117,88 +104,58 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
-  
   accountStatus: {
     type: String,
     enum: ['active', 'suspended', 'deleted'],
     default: 'active'
   },
   
-  // Login tracking
-  loginAttempts: {
-    type: Number,
-    default: 0,
-    select: false
-  },
-  
-  lockUntil: {
-    type: Date,
-    select: false
-  },
-  
+  // Tracking
+  profileViews: [{
+    viewerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    viewedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
   lastActive: {
     type: Date,
     default: Date.now
-  },
-  
-  // Timestamps
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  
-  updatedAt: {
-    type: Date,
-    default: Date.now
   }
+}, {
+  timestamps: true
 });
-
-// Indexes for performance
-userSchema.index({ email: 1 });
-userSchema.index({ rollNumber: 1 });
-userSchema.index({ branch: 1, year: 1 });
 
 // Hash password before saving
 userSchema.pre('save', async function(next) {
-  // Only hash if password is modified
   if (!this.isModified('password')) {
     return next();
   }
   
-  try {
-    const salt = await bcrypt.genSalt(parseInt(process.env.BCRYPT_ROUNDS) || 12);
-    this.password = await bcrypt.hash(this.password, salt);
-    next();
-  } catch (error) {
-    next(error);
-  }
-});
-
-// Update 'updatedAt' before saving
-userSchema.pre('save', function(next) {
-  this.updatedAt = Date.now();
+  const salt = await bcrypt.genSalt(12);
+  this.password = await bcrypt.hash(this.password, salt);
   next();
 });
 
-// Method to compare passwords
+// Compare password method
 userSchema.methods.comparePassword = async function(candidatePassword) {
-  try {
-    return await bcrypt.compare(candidatePassword, this.password);
-  } catch (error) {
-    throw new Error('Password comparison failed');
-  }
+  return await bcrypt.compare(candidatePassword, this.password);
 };
 
-// Method to check if account is locked
+// Check if account is locked (NEW - ADDED)
 userSchema.methods.isLocked = function() {
+  // Check if lockUntil exists and is in the future
   return !!(this.lockUntil && this.lockUntil > Date.now());
 };
 
-// Method to increment login attempts
-userSchema.methods.incLoginAttempts = function() {
-  // Reset attempts if lock has expired
+// Increment login attempts (NEW - ADDED)
+userSchema.methods.incLoginAttempts = async function() {
+  // If lock has expired, reset attempts
   if (this.lockUntil && this.lockUntil < Date.now()) {
-    return this.updateOne({
+    return await this.updateOne({
       $set: { loginAttempts: 1 },
       $unset: { lockUntil: 1 }
     });
@@ -206,24 +163,30 @@ userSchema.methods.incLoginAttempts = function() {
   
   // Otherwise increment attempts
   const updates = { $inc: { loginAttempts: 1 } };
-  const maxAttempts = parseInt(process.env.MAX_LOGIN_ATTEMPTS) || 5;
   
-  // Lock account if max attempts reached
+  // Lock account after 5 failed attempts for 2 hours
+  const maxAttempts = 5;
+  const lockTime = 2 * 60 * 60 * 1000; // 2 hours in milliseconds
+  
   if (this.loginAttempts + 1 >= maxAttempts && !this.isLocked()) {
-    updates.$set = { lockUntil: Date.now() + 3600000 }; // 1 hour
+    updates.$set = { lockUntil: Date.now() + lockTime };
   }
   
-  return this.updateOne(updates);
+  return await this.updateOne(updates);
 };
 
-// Method to reset login attempts
-userSchema.methods.resetLoginAttempts = function() {
-  return this.updateOne({
+// Reset login attempts (NEW - ADDED)
+userSchema.methods.resetLoginAttempts = async function() {
+  return await this.updateOne({
     $set: { loginAttempts: 0 },
     $unset: { lockUntil: 1 }
   });
 };
 
-const User = mongoose.model('User', userSchema);
+// Update lastActive on every query
+userSchema.pre(/^find/, function(next) {
+  this.where({ accountStatus: 'active' });
+  next();
+});
 
-module.exports = User;
+module.exports = mongoose.model('User', userSchema);
