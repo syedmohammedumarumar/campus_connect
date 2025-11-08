@@ -6,12 +6,13 @@ const helmet = require('helmet');
 const cookieParser = require('cookie-parser');
 const morgan = require('morgan');
 
-const { errorHandler } = require('./middleware/errorHandler'); // ✅ FIXED: destructure
+const { errorHandler } = require('./middleware/errorHandler');
 const { apiLimiter } = require('./middleware/rateLimiter');
 
 // Import routes
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
+const connectionRoutes = require('./routes/connectionRoutes'); // ✅ NEW - Part 3
 
 const app = express();
 
@@ -47,11 +48,9 @@ app.get('/', (req, res) => {
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/connections', connectionRoutes); // ✅ NEW - Part 3
 
-// Error handler (must be last)
-app.use(errorHandler); // ✅ Now this will work
-
-// 404 handler
+// 404 handler (must be before error handler)
 app.use((req, res) => {
   res.status(404).json({
     success: false,
@@ -59,7 +58,11 @@ app.use((req, res) => {
   });
 });
 
+// Error handler (must be last)
+app.use(errorHandler);
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
 });
