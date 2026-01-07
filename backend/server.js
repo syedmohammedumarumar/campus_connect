@@ -12,7 +12,8 @@ const { apiLimiter } = require('./middleware/rateLimiter');
 // Import routes
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
-const connectionRoutes = require('./routes/connectionRoutes'); // ✅ NEW - Part 3
+const connectionRoutes = require('./routes/connectionRoutes');
+const achievementRoutes = require('./routes/achievementRoutes');
 
 const app = express();
 
@@ -48,7 +49,8 @@ app.get('/', (req, res) => {
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
-app.use('/api/connections', connectionRoutes); // ✅ NEW - Part 3
+app.use('/api/connections', connectionRoutes);
+app.use('/api/achievements', achievementRoutes);
 
 // 404 handler (must be before error handler)
 app.use((req, res) => {
