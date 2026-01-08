@@ -14,6 +14,7 @@ const notificationSchema = new mongoose.Schema({
       'connection_rejected',
       'new_message',
       'achievement_added',
+      'achievement_featured',      // ✅ ADDED THIS
       'profile_view',
       'admin_announcement',
       'achievement_liked',
